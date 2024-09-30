@@ -7,12 +7,14 @@
 
 import Foundation
 import HealthKit
+import Observation
 
-final actor HKWrapper {
-    private init() {}
-    static let shared = HKWrapper()
-    private let store = HKHealthStore()
-    private var workoutsAnchor: HKQueryAnchor? = nil
+@Observable
+final class HKWrapper {
+    @ObservationIgnored private let store = HKHealthStore()
+    @ObservationIgnored private var workoutsAnchor: HKQueryAnchor?
+    @ObservationIgnored private var workoutUpdatesTask: Task<Void, Never>?
+    var workouts: [HKWorkout]?
 
     func requestAuthorization() async -> HKAuthorizationStatus {
         guard HKHealthStore.isHealthDataAvailable() else {
@@ -38,14 +40,52 @@ final actor HKWrapper {
         HKSamplePredicate.workout(samplesPredicate())
     }
 
-    func readWorkouts() async  -> [HKWorkout]? {
-        let query = HKSampleQueryDescriptor(predicates: [workoutSamplesPredicate()],
-                                            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)])
+    func readWorkouts() async {
+        let query = HKAnchoredObjectQueryDescriptor(predicates: [workoutSamplesPredicate()],
+                                                    anchor: workoutsAnchor)
         do {
             let result = try await query.result(for: store)
-            return result
+            if result.addedSamples.isEmpty {
+                return
+            }
+            workoutsAnchor = result.newAnchor
+            workouts = result.addedSamples.sorted { lhs, rhs in
+                lhs.startDate > rhs.startDate
+            }
+            startWorkoutUpdatesTask()
         } catch {
-            return nil
+            print(error.localizedDescription)
+        }
+    }
+
+    func startWorkoutUpdatesTask() {
+        guard let anchor = workoutsAnchor else {
+            return
+        }
+        workoutUpdatesTask?.cancel()
+        let query = HKAnchoredObjectQueryDescriptor(predicates:[workoutSamplesPredicate()],
+                                                    anchor: anchor)
+        let results = query.results(for: store)
+        workoutUpdatesTask = Task {
+            do {
+                for try await result in results {
+                    try Task.checkCancellation()
+                    let addedCount = result.addedSamples.count
+                    let deletedCount = result.deletedObjects.count
+                    if addedCount == 0, deletedCount == 0 {
+                        continue
+                    }
+                    workouts?.append(contentsOf: result.addedSamples)
+                    workouts?.removeAll { workout in
+                        result.deletedObjects.contains { $0.uuid == workout.uuid }
+                    }
+                    workouts?.sort { lhs, rhs in
+                        return lhs.startDate > rhs.startDate
+                    }
+                }
+            } catch {
+                print(error.localizedDescription)
+            }
         }
     }
 }

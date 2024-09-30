@@ -11,15 +11,17 @@ import HealthKit
 @main
 struct WorkoutsFetchApp: App {
     @State private var authStatus = HKAuthorizationStatus.notDetermined
+    @State private var wrapper = HKWrapper()
 
     var body: some Scene {
         WindowGroup {
             content
                 .task {
                     if authStatus == .notDetermined {
-                        authStatus = await HKWrapper.shared.requestAuthorization()
+                        authStatus = await wrapper.requestAuthorization()
                     }
                 }
+                .environment(wrapper)
         }
     }
 
