@@ -13,7 +13,8 @@ struct ContentView: View {
 
     var body: some View {
         content.task {
-            if wrapper.workouts == nil {
+            let shouldUpdate = UserDefaults.standard.bool(forKey: "update_workouts")
+            if wrapper.workouts == nil || shouldUpdate {
                 await wrapper.readWorkouts()
             }
         }
@@ -22,22 +23,21 @@ struct ContentView: View {
     @ViewBuilder private var content: some View {
         if let workouts = wrapper.workouts {
             List {
-                Section {
+                Section("Workouts") {
                     ForEach(workouts, id: \.uuid) { workout in
-                        LabeledContent(workout.workoutActivityType.commonName,
-                                       value: workout.startDate.formatted(date: .abbreviated, time: .shortened))
-                    }
-                } footer: {
-                    Button("Load older workouts") {
-                        Task {
-                            await wrapper.readWorkouts()
-                        }
+                        workoutRow(workout)
                     }
                 }
             }
         } else {
             ProgressView()
         }
+    }
+
+    @ViewBuilder private func workoutRow(_ workout: HKWorkout) -> some View {
+        let date = workout.startDate.formatted(date: .abbreviated, time: .shortened)
+        LabeledContent(workout.workoutActivityType.commonName,
+                       value: date)
     }
 }
 

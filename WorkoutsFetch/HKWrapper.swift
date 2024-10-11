@@ -75,17 +75,43 @@ final class HKWrapper {
                     if addedCount == 0, deletedCount == 0 {
                         continue
                     }
-                    workouts?.append(contentsOf: result.addedSamples)
-                    workouts?.removeAll { workout in
+                    var updatedWorkouts = workouts
+                    updatedWorkouts?.append(contentsOf: result.addedSamples)
+                    updatedWorkouts?.removeAll { workout in
                         result.deletedObjects.contains { $0.uuid == workout.uuid }
                     }
-                    workouts?.sort { lhs, rhs in
+                    updatedWorkouts?.sort { lhs, rhs in
                         return lhs.startDate > rhs.startDate
+                    }
+                    await MainActor.run { [updatedWorkouts] in
+                        workouts = updatedWorkouts
                     }
                 }
             } catch {
                 print(error.localizedDescription)
             }
         }
+    }
+
+    func enableBackgroundWorkoutUpdates() async {
+        let workoutType = HKObjectType.workoutType()
+        do {
+            try await store.enableBackgroundDelivery(for: workoutType, frequency: .immediate)
+        } catch {
+            print(error.localizedDescription)
+        }
+
+        let backgroundQuery = HKObserverQuery(sampleType: workoutType,
+                                              predicate: samplesPredicate()) { query, completion, optError in
+            if let error = optError {
+                print(error.localizedDescription)
+                return
+            }
+
+            UserDefaults.standard.setValue(true, forKey: "update_workouts")
+            completion()
+        }
+
+        store.execute(backgroundQuery)
     }
 }

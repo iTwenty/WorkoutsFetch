@@ -21,6 +21,13 @@ struct WorkoutsFetchApp: App {
                         authStatus = await wrapper.requestAuthorization()
                     }
                 }
+                .onChange(of: authStatus) { _, new in
+                    if authStatus == .sharingAuthorized {
+                        Task {
+                            await wrapper.enableBackgroundWorkoutUpdates()
+                        }
+                    }
+                }
                 .environment(wrapper)
         }
     }
