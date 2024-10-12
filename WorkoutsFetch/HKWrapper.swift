@@ -10,6 +10,7 @@ import HealthKit
 import Observation
 
 @Observable
+@MainActor
 final class HKWrapper {
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var workoutsAnchor: HKQueryAnchor?
@@ -29,13 +30,11 @@ final class HKWrapper {
         return store.authorizationStatus(for: HKQuantityType.workoutType())
     }
 
-    // Predicate that can be used to query any samples over last 3 months.
     private func samplesPredicate() -> NSPredicate {
-        let threeMonthsAgo = Calendar.current.date(byAdding: .month, value: -3, to: .now)
-        return HKQuery.predicateForSamples(withStart: threeMonthsAgo, end: .now)
+        let oneYearAgo = Calendar.current.date(byAdding: .day, value: -365, to: .now)
+        return HKQuery.predicateForSamples(withStart: oneYearAgo, end: .now)
     }
 
-    // Predicate for workouts in last 3 months.
     private func workoutSamplesPredicate() -> HKSamplePredicate<HKWorkout> {
         HKSamplePredicate.workout(samplesPredicate())
     }
